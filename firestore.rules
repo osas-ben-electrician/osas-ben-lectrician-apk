@@ -1,0 +1,174 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny all access by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidCountry(country) {
+      return country is string && (country == 'Spain' || country == 'Nigeria');
+    }
+
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.firstName is string && data.firstName.size() >= 1 && data.firstName.size() <= 80 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+             isValidCountry(data.country) &&
+             data.region is string && data.region.size() >= 1 && data.region.size() <= 100 &&
+             (!('province' in data) || (data.province is string && data.province.size() >= 1 && data.province.size() <= 100)) &&
+             data.localArea is string && data.localArea.size() >= 1 && data.localArea.size() <= 120 &&
+             data.language is string && (data.language == 'en' || data.language == 'es') &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidRegisteredDevice(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.deviceName is string && data.deviceName.size() >= 1 && data.deviceName.size() <= 100 &&
+             data.deviceModel is string && data.deviceModel.size() >= 1 && data.deviceModel.size() <= 100 &&
+             isValidCountry(data.country) &&
+             data.latitude is number && data.latitude >= -90 && data.latitude <= 90 &&
+             data.longitude is number && data.longitude >= -180 && data.longitude <= 180 &&
+             data.status is string && (data.status == 'ACTIVE' || data.status == 'OFFLINE_LAST_KNOWN') &&
+             data.lastLocationUpdateText is string && data.lastLocationUpdateText.size() >= 1 && data.lastLocationUpdateText.size() <= 60 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidEmergencyReport(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.emergencyType is string && (data.emergencyType == 'RESCUE' || data.emergencyType == 'ROBBERY' || data.emergencyType == 'KIDNAPPING') &&
+             data.status is string && (data.status == 'ACTIVE' || data.status == 'RESOLVED' || data.status == 'CANCELLED_FALSE_ALARM') &&
+             isValidCountry(data.country) &&
+             data.region is string && data.region.size() >= 1 && data.region.size() <= 100 &&
+             (!('province' in data) || (data.province is string && data.province.size() >= 1 && data.province.size() <= 100)) &&
+             data.localArea is string && data.localArea.size() >= 1 && data.localArea.size() <= 120 &&
+             data.latitude is number && data.latitude >= -90 && data.latitude <= 90 &&
+             data.longitude is number && data.longitude >= -180 && data.longitude <= 180 &&
+             data.reportedTime is string && data.reportedTime.size() >= 1 && data.reportedTime.size() <= 40 &&
+             data.reportedDate is string && data.reportedDate.size() >= 1 && data.reportedDate.size() <= 40 &&
+             data.testAlert is bool &&
+             data.discreetMode is bool &&
+             (!('note' in data) || (data.note is string && data.note.size() <= 300)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function userProfileExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function userCountryMatches(uid, targetCountry) {
+      return userProfileExists(uid) &&
+             get(/databases/$(database)/documents/users/$(uid)).data.country == targetCountry;
+    }
+
+    // 1. Private User Profiles (strictly owner-only, protects email & personal settings)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+
+      allow create: if isValidId(userId) &&
+                       isOwner(userId) &&
+                       incoming().keys().hasAll(['userId', 'firstName', 'email', 'country', 'region', 'localArea', 'language', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'firstName', 'email', 'country', 'region', 'province', 'localArea', 'language', 'createdAt', 'updatedAt']) &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isValidId(userId) &&
+                       isOwner(userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['firstName', 'email', 'country', 'region', 'province', 'localArea', 'language', 'updatedAt']);
+
+      allow delete: if isValidId(userId) && isOwner(userId);
+
+      // 2. User's Registered Devices (strictly owner-only)
+      match /devices/{deviceId} {
+        allow get: if isValidId(userId) && isValidId(deviceId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId);
+
+        allow create: if isValidId(userId) &&
+                         isValidId(deviceId) &&
+                         isOwner(userId) &&
+                         incoming().keys().hasAll(['userId', 'deviceName', 'deviceModel', 'country', 'latitude', 'longitude', 'status', 'lastLocationUpdateText', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'deviceName', 'deviceModel', 'country', 'latitude', 'longitude', 'status', 'lastLocationUpdateText', 'createdAt', 'updatedAt']) &&
+                         isValidRegisteredDevice(incoming(), userId);
+
+        allow update: if isValidId(userId) &&
+                         isValidId(deviceId) &&
+                         isOwner(userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidRegisteredDevice(incoming(), userId) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['deviceName', 'deviceModel', 'country', 'latitude', 'longitude', 'status', 'lastLocationUpdateText', 'updatedAt']);
+
+        allow delete: if isValidId(userId) && isValidId(deviceId) && isOwner(userId);
+      }
+    }
+
+    // 3. Country-Separated Emergency Reports (no PII, country-gated)
+    match /emergency_reports/{reportId} {
+      allow get: if isValidId(reportId) &&
+                    isSignedIn() &&
+                    (existing().userId == request.auth.uid || userCountryMatches(request.auth.uid, existing().country));
+
+      // Client queries MUST include .whereEqualTo("country", userCountry)
+      allow list: if isSignedIn() && isValidCountry(resource.data.country);
+
+      allow create: if isValidId(reportId) &&
+                       isSignedIn() &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().status == 'ACTIVE' &&
+                       incoming().keys().hasAll(['userId', 'emergencyType', 'status', 'country', 'region', 'localArea', 'latitude', 'longitude', 'reportedTime', 'reportedDate', 'testAlert', 'discreetMode', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'emergencyType', 'status', 'country', 'region', 'province', 'localArea', 'latitude', 'longitude', 'reportedTime', 'reportedDate', 'testAlert', 'discreetMode', 'note', 'createdAt', 'updatedAt']) &&
+                       isValidEmergencyReport(incoming()) &&
+                       userCountryMatches(request.auth.uid, incoming().country);
+
+      allow update: if isValidId(reportId) &&
+                       isSignedIn() &&
+                       isValidEmergencyReport(incoming()) &&
+                       existing().userId == request.auth.uid &&
+                       existing().status == 'ACTIVE' &&
+                       incoming().userId == existing().userId &&
+                       incoming().country == existing().country &&
+                       incoming().emergencyType == existing().emergencyType &&
+                       incoming().testAlert == existing().testAlert &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         // Action 1: Live GPS location update while ACTIVE
+                         (incoming().status == 'ACTIVE' &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['latitude', 'longitude', 'updatedAt'])) ||
+                         // Action 2: Resolve or Cancel false alarm (terminal status transition)
+                         ((incoming().status == 'RESOLVED' || incoming().status == 'CANCELLED_FALSE_ALARM') &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'note', 'updatedAt']))
+                       );
+
+      allow delete: if isValidId(reportId) &&
+                       isSignedIn() &&
+                       existing().userId == request.auth.uid;
+    }
+  }
+}

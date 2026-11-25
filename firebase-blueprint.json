@@ -1,0 +1,199 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private user registration and regional assignment profile for OSAS BEN TRACKER.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "User's first name."
+        },
+        "email": {
+          "type": "string",
+          "description": "Private verified user email address (owner-read only)."
+        },
+        "country": {
+          "type": "string",
+          "enum": ["Spain", "Nigeria"],
+          "description": "Selected operating country."
+        },
+        "region": {
+          "type": "string",
+          "description": "Nigerian State/FCT or Spanish Autonomous Community."
+        },
+        "province": {
+          "type": "string",
+          "description": "Optional Spanish Province."
+        },
+        "localArea": {
+          "type": "string",
+          "description": "Nigerian LGA or Spanish Municipality."
+        },
+        "language": {
+          "type": "string",
+          "enum": ["en", "es"],
+          "description": "Preferred UI language code."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of profile creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last profile update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "firstName", "email", "country", "region", "localArea", "language", "createdAt", "updatedAt"]
+    },
+    "RegisteredDevice": {
+      "title": "RegisteredDevice",
+      "description": "User's own registered Android device for MY PHONE TRACKER.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "deviceName": {
+          "type": "string",
+          "description": "Display name of the registered Android device."
+        },
+        "deviceModel": {
+          "type": "string",
+          "description": "Device manufacturer and model."
+        },
+        "country": {
+          "type": "string",
+          "enum": ["Spain", "Nigeria"],
+          "description": "Country where the device was last recorded."
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Last successfully recorded GPS latitude."
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Last successfully recorded GPS longitude."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ACTIVE", "OFFLINE_LAST_KNOWN"],
+          "description": "Reported device availability status."
+        },
+        "lastLocationUpdateText": {
+          "type": "string",
+          "description": "Formatted local date and time of the last location update."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of device registration."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last location update."
+        }
+      },
+      "required": ["userId", "deviceName", "deviceModel", "country", "latitude", "longitude", "status", "lastLocationUpdateText", "createdAt", "updatedAt"]
+    },
+    "EmergencyReport": {
+      "title": "EmergencyReport",
+      "description": "Country-isolated emergency alert report (Forest Rescue, Armed Robbery, Kidnapping) without exposing reporter PII.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated reporter UID."
+        },
+        "emergencyType": {
+          "type": "string",
+          "enum": ["RESCUE", "ROBBERY", "KIDNAPPING"],
+          "description": "Emergency category."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ACTIVE", "RESOLVED", "CANCELLED_FALSE_ALARM"],
+          "description": "Lifecycle status of the report."
+        },
+        "country": {
+          "type": "string",
+          "enum": ["Spain", "Nigeria"],
+          "description": "Strict country feed partition."
+        },
+        "region": {
+          "type": "string",
+          "description": "State/FCT or Autonomous Community."
+        },
+        "province": {
+          "type": "string",
+          "description": "Optional Spanish Province."
+        },
+        "localArea": {
+          "type": "string",
+          "description": "LGA or Municipality."
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Best available GPS latitude."
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Best available GPS longitude."
+        },
+        "reportedTime": {
+          "type": "string",
+          "description": "Formatted local time reported."
+        },
+        "reportedDate": {
+          "type": "string",
+          "description": "Formatted local date reported."
+        },
+        "testAlert": {
+          "type": "boolean",
+          "description": "True when triggered inside TEST MODE; visibly labelled TEST."
+        },
+        "discreetMode": {
+          "type": "boolean",
+          "description": "True when triggered via discreet activation."
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional brief emergency note without personal PII."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of initial alert."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest coordinate/status update."
+        }
+      },
+      "required": ["userId", "emergencyType", "status", "country", "region", "localArea", "latitude", "longitude", "reportedTime", "reportedDate", "testAlert", "discreetMode", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profile isolated strictly to the authenticated owner."
+    },
+    "/users/{userId}/devices/{deviceId}": {
+      "schema": { "$ref": "#/entities/RegisteredDevice" },
+      "description": "Registered personal Android devices isolated strictly to the authenticated owner."
+    },
+    "/emergency_reports/{reportId}": {
+      "schema": { "$ref": "#/entities/EmergencyReport" },
+      "description": "Country-partitioned real-time emergency alerts readable only within the user's assigned country and mutable only by the creator."
+    }
+  }
+}

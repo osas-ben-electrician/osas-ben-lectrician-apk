@@ -1,0 +1,6 @@
+{
+  "name": "OSAS BEN TRACKER",
+  "description": "Emergency reporting, rescue coordination, location tracking, and photo-location metadata utility for Spain and Nigeria.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
